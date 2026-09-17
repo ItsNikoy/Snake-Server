@@ -3,466 +3,267 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Multiplayer Snake Game</title>
-    <!-- Connect to Socket.io Client Library -->
+    <title>Multiplayer Arcade Snake</title>
+    <!-- Connect to Socket.io Client -->
     <script src="https://socket.io"></script>
     <style>
+        * {
+            box-sizing: border-box;
+        }
         body {
-            background-color: #121212;
+            background: linear-gradient(135deg, #183049 0%, #1e1e24 100%);
             color: #ffffff;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Courier New', Courier, monospace;
             display: flex;
-            flex-direction: column;
             align-items: center;
             justify-content: center;
             height: 100vh;
             margin: 0;
             overflow: hidden;
-        }
-        h1 {
-            margin-bottom: 10px;
-            font-size: 24px;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-            color: #00ffcc;
-        }
-        #game-container {
-            display: flex;
-            gap: 20px;
-            background: #1e1e1e;
             padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-            border: 1px solid #333;
         }
-        canvas {
-            background-color: #050505;
-            border: 2px solid #333;
-            border-radius: 4px;
-        }
-        #leaderboard {
-            width: 200px;
-            background: #252525;
-            padding: 15px;
+        #game-wrapper {
+            background-color: #0c1624;
+            border: 4px solid #1c2d42;
             border-radius: 8px;
-            border: 1px solid #444;
+            width: 100%;
+            max-width: 950px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.6);
         }
-        #leaderboard h2 {
-            margin-top: 0;
-            font-size: 18px;
-            color: #ff007f;
-            border-bottom: 2px solid #444;
-            padding-bottom: 5px;
-            text-align: center;
-        }
-        .player-row {
+        #top-bar {
             display: flex;
             justify-content: space-between;
-            margin: 8px 0;
-            font-size: 14px;
-            font-weight: bold;
-        }
-        #status {
-            margin-top: 15px;
-            font-size: 14px;
-            color: #888;
-        }
-    </style>
-</head>
-<body>
-
-    <h1>Multiplayer Snake</h1>
-    
-    <div id="game-container">
-        <!-- Game Arena -->
-        <canvas id="gameCanvas" width="400" height="400"></canvas>
-        
-        <!-- Leaderboard Box -->
-        <div id="leaderboard">
-            <h2>Leaderboard</h2>
-            <div id="leaderboard-list">
-                <div style="color: #aaa; text-align: center;">Waiting for server...</div>
-            </div>
-        </div>
-    </div>
-
-    <div id="status">Connecting to server...</div>
-
-    <script>
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
-        const statusDiv = document.getElementById('status');
-        const leaderboardList = document.getElementById('leaderboard-list');
-
-        const GRID_SIZE = 20;
-        const TILE_COUNT = canvas.width / GRID_SIZE;
-
-        // Connect to your live Render server link
-        const socket = io("https://onrender.com");
-
-        let currentPlayers = {};
-        let localSnake = {
-            x: Math.floor(Math.random() * (TILE_COUNT - 10)) + 5,
-            y: Math.floor(Math.random() * (TILE_COUNT - 10)) + 5,
-            dx: 0,
-            dy: 0,
-            score: 0
-        };
-
-        let food = { x: 10, y: 10 };
-
-        socket.on('connect', () => {
-            statusDiv.innerText = "Connected to server! Use WASD or Arrow Keys.";
-            statusDiv.style.color = "#00ffcc";
-        });
-
-        socket.on('disconnect', () => {
-            statusDiv.innerText = "Disconnected from server.";
-            statusDiv.style.color = "#ff0055";
-        });
-
-        // Track positions of all players from the server
-        socket.on('currentPlayers', (players) => {
-            currentPlayers = players;
-        });
-
-        socket.on('newPlayer', (playerInfo) => {
-            currentPlayers[playerInfo.id] = playerInfo;
-        });
-
-        socket.on('playerMoved', (playerInfo) => {
-            if (currentPlayers[playerInfo.id]) {
-                currentPlayers[playerInfo.id].x = playerInfo.x;
-                currentPlayers[playerInfo.id].y = playerInfo.y;
-            }
-        });
-
-        socket.on('playerDisconnected', (id) => {
-            delete currentPlayers[id];
-        });
-
-        // Listen for the server-side leaderboard updates
-        socket.on('leaderboardUpdate', (topPlayers) => {
-            leaderboardList.innerHTML = '';
-            topPlayers.forEach((player, index) => {
-                const row = document.createElement('div');
-                row.className = 'player-row';
-                row.style.color = player.color;
-                
-                // Truncate socket ID for clean viewing
-                const shortId = player.id.substring(0, 5);
-                row.innerHTML = `<span>${index + 1}. #${shortId}</span> <span>${player.score}</span>`;
-                leaderboardList.appendChild(row);
-            });
-        });
-
-        // Keyboard Controls
-        window.addEventListener('keydown', (e) => {
-            switch(e.key.toLowerCase()) {
-                case 'arrowup':
-                case 'w':
-                    if (localSnake.dy === 0) { localSnake.dx = 0; localSnake.dy = -1; }
-                    break;
-                case 'arrowdown':
-                case 's':
-                    if (localSnake.dy === 0) { localSnake.dx = 0; localSnake.dy = 1; }
-                    break;
-                case 'arrowleft':
-                case 'a':
-                    if (localSnake.dx === 0) { localSnake.dx = -1; localSnake.dy = 0; }
-                    break;
-                case 'arrowright':
-                case 'd':
-                    if (localSnake.dx === 0) { localSnake.dx = 1; localSnake.dy = 0; }
-                    break;
-            }
-        });
-
-        // Simple local game loop for testing updates
-        function gameLoop() {
-            // Move local snake position
-            localSnake.x += localSnake.dx;
-            localSnake.y += localSnake.dy;
-
-            // Wrap snake positions on screen edges
-            if (localSnake.x < 0) localSnake.x = TILE_COUNT - 1;
-            if (localSnake.x >= TILE_COUNT) localSnake.x = 0;
-            if (localSnake.y < 0) localSnake.y = TILE_COUNT - 1;
-            if (localSnake.y >= TILE_COUNT) localSnake.y = 0;
-
-            // Check food collision
-            if (localSnake.x === food.x && localSnake.y === food.y) {
-                localSnake.score += 10;
-                food.x = Math.floor(Math.random() * TILE_COUNT);
-                food.y = Math.floor(Math.random() * TILE_COUNT);
-            }
-
-            // Update the server with our new movement and score
-            if (localSnake.dx !== 0 || localSnake.dy !== 0) {
-                socket.emit('playerUpdate', { x: localSnake.x, y: localSnake.y, score: localSnake.score });
-            }
-
-            // Draw Everything
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            // Draw Food
-            ctx.fillStyle = '#ff0055';
-            ctx.shadowBlur = 10;
-            ctx.shadowColor = '#ff0055';
-            ctx.fillRect(food.x * GRID_SIZE, food.y * GRID_SIZE, GRID_SIZE - 2, GRID_SIZE - 2);
-
-            // Draw Other Players
-            ctx.shadowBlur = 8;
-            Object.keys(currentPlayers).forEach((id) => {
-                if (id !== socket.id) {
-                    ctx.fillStyle = currentPlayers[id].color || '#00ffcc';
-                    ctx.shadowColor = ctx.fillStyle;
-                    ctx.fillRect(currentPlayers[id].x * GRID_SIZE, currentPlayers[id].y * GRID_SIZE, GRID_SIZE - 2, GRID_SIZE - 2);
-                }
-            });
-
-            // Draw Local Player Snake
-            ctx.fillStyle = '#00ffcc';
-            ctx.shadowColor = '#00ffcc';
-            ctx.fillRect(localSnake.x * GRID_SIZE, localSnake.y * GRID_SIZE, GRID_SIZE - 2, GRID_SIZE - 2);
-            ctx.shadowBlur = 0; // Reset blur
-        }
-
-        setInterval(gameLoop, 150); // Updates game every 150ms
-    </script>
-</body>
-</html>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Multiplayer Snake Game</title>
-    <!-- Connect to Socket.io Client Library -->
-    <script src="https://socket.io"></script>
-    <style>
-        body {
-            background-color: #121212;
-            color: #ffffff;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            display: flex;
-            flex-direction: column;
             align-items: center;
-            justify-content: center;
-            height: 100vh;
-            margin: 0;
-            overflow: hidden;
+            padding: 12px 20px;
+            border-bottom: 2px solid #1c2d42;
+            font-weight: bold;
+            font-size: 16px;
         }
-        h1 {
-            margin-bottom: 10px;
-            font-size: 24px;
-            letter-spacing: 2px;
-            text-transform: uppercase;
+        #exit-btn {
+            color: #a0aec0;
+            cursor: pointer;
+            user-select: none;
+        }
+        #score-display {
             color: #00ffcc;
+            font-size: 18px;
+            letter-spacing: 1px;
         }
-        #game-container {
-            display: flex;
-            gap: 20px;
-            background: #1e1e1e;
-            padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-            border: 1px solid #333;
+        #high-score {
+            color: #a0aec0;
+        }
+        #arena-container {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 16 / 9;
         }
         canvas {
-            background-color: #050505;
-            border: 2px solid #333;
+            width: 100%;
+            height: 100%;
+            background-color: #0c1624;
+            display: block;
+        }
+        #connection-toast {
+            position: absolute;
+            bottom: 15px;
+            left: 15px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 6px 12px;
             border-radius: 4px;
-        }
-        #leaderboard {
-            width: 200px;
-            background: #252525;
-            padding: 15px;
-            border-radius: 8px;
-            border: 1px solid #444;
-        }
-        #leaderboard h2 {
-            margin-top: 0;
-            font-size: 18px;
-            color: #ff007f;
-            border-bottom: 2px solid #444;
-            padding-bottom: 5px;
-            text-align: center;
-        }
-        .player-row {
-            display: flex;
-            justify-content: space-between;
-            margin: 8px 0;
-            font-size: 14px;
-            font-weight: bold;
-        }
-        #status {
-            margin-top: 15px;
-            font-size: 14px;
-            color: #888;
+            font-size: 12px;
+            color: #ff9900;
+            border: 1px solid #333;
+            pointer-events: none;
         }
     </style>
 </head>
 <body>
 
-    <h1>Multiplayer Snake</h1>
-    
-    <div id="game-container">
-        <!-- Game Arena -->
-        <canvas id="gameCanvas" width="400" height="400"></canvas>
+    <div id="game-wrapper">
+        <!-- Top Status Bar Interface -->
+        <div id="top-bar">
+            <div id="exit-btn">X Exit</div>
+            <div id="score-display">SCORE: <span id="current-score">0</span></div>
+            <div id="high-score">HI <span id="hi-val">0</span></div>
+        </div>
         
-        <!-- Leaderboard Box -->
-        <div id="leaderboard">
-            <h2>Leaderboard</h2>
-            <div id="leaderboard-list">
-                <div style="color: #aaa; text-align: center;">Waiting for server...</div>
-            </div>
+        <!-- Big Multi-Food Arena -->
+        <div id="arena-container">
+            <canvas id="gameCanvas"></canvas>
+            <div id="connection-toast">Connecting to server...</div>
         </div>
     </div>
-
-    <div id="status">Connecting to server...</div>
 
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
-        const statusDiv = document.getElementById('status');
-        const leaderboardList = document.getElementById('leaderboard-list');
+        const toast = document.getElementById('connection-toast');
+        const scoreDisplay = document.getElementById('current-score');
+        const hiDisplay = document.getElementById('hi-val');
 
-        const GRID_SIZE = 20;
-        const TILE_COUNT = canvas.width / GRID_SIZE;
+        // Layout Scaling Constants
+        const GRID_COUNT_X = 64; 
+        const GRID_COUNT_Y = 36; 
+        let tileSize = 0;
 
-        // Connect to your live Render server link
+        function resizeCanvas() {
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = canvas.parentElement.clientHeight;
+            tileSize = canvas.width / GRID_COUNT_X;
+        }
+        window.addEventListener('resize', resizeCanvas);
+
+        // Connect directly to your live Render server address
         const socket = io("https://onrender.com");
 
         let currentPlayers = {};
         let localSnake = {
-            x: Math.floor(Math.random() * (TILE_COUNT - 10)) + 5,
-            y: Math.floor(Math.random() * (TILE_COUNT - 10)) + 5,
+            x: Math.floor(Math.random() * (GRID_COUNT_X - 10)) + 5,
+            y: Math.floor(Math.random() * (GRID_COUNT_Y - 10)) + 5,
             dx: 0,
             dy: 0,
-            score: 0
+            score: 0,
+            body: []
         };
+        let tailLength = 5;
 
-        let food = { x: 10, y: 10 };
+        // Massive Chaotic Food Spawns Array
+        let foodArray = [];
+        const TOTAL_FOOD_COUNT = 150; 
+
+        function spawnInitialFood() {
+            foodArray = [];
+            for (let i = 0; i < TOTAL_FOOD_COUNT; i++) {
+                foodArray.push({
+                    x: Math.floor(Math.random() * GRID_COUNT_X),
+                    y: Math.floor(Math.random() * GRID_COUNT_Y)
+                });
+            }
+        }
 
         socket.on('connect', () => {
-            statusDiv.innerText = "Connected to server! Use WASD or Arrow Keys.";
-            statusDiv.style.color = "#00ffcc";
+            toast.innerText = "CONNECTED TO LOBBY";
+            toast.style.color = "#00ffcc";
+            resizeCanvas();
+            spawnInitialFood();
         });
 
         socket.on('disconnect', () => {
-            statusDiv.innerText = "Disconnected from server.";
-            statusDiv.style.color = "#ff0055";
+            toast.innerText = "DISCONNECTED";
+            toast.style.color = "#ff0055";
         });
 
-        // Track positions of all players from the server
-        socket.on('currentPlayers', (players) => {
-            currentPlayers = players;
-        });
-
-        socket.on('newPlayer', (playerInfo) => {
-            currentPlayers[playerInfo.id] = playerInfo;
-        });
-
+        socket.on('currentPlayers', (players) => { currentPlayers = players; });
+        socket.on('newPlayer', (playerInfo) => { currentPlayers[playerInfo.id] = playerInfo; });
+        socket.on('playerDisconnected', (id) => { delete currentPlayers[id]; });
+        
         socket.on('playerMoved', (playerInfo) => {
             if (currentPlayers[playerInfo.id]) {
                 currentPlayers[playerInfo.id].x = playerInfo.x;
                 currentPlayers[playerInfo.id].y = playerInfo.y;
+                currentPlayers[playerInfo.id].body = playerInfo.body || [];
             }
         });
 
-        socket.on('playerDisconnected', (id) => {
-            delete currentPlayers[id];
-        });
-
-        // Listen for the server-side leaderboard updates
-        socket.on('leaderboardUpdate', (topPlayers) => {
-            leaderboardList.innerHTML = '';
-            topPlayers.forEach((player, index) => {
-                const row = document.createElement('div');
-                row.className = 'player-row';
-                row.style.color = player.color;
-                
-                // Truncate socket ID for clean viewing
-                const shortId = player.id.substring(0, 5);
-                row.innerHTML = `<span>${index + 1}. #${shortId}</span> <span>${player.score}</span>`;
-                leaderboardList.appendChild(row);
-            });
-        });
-
-        // Keyboard Controls
+        // Anti-Page Scrolling Lock + Direction Inputs
         window.addEventListener('keydown', (e) => {
-            switch(e.key.toLowerCase()) {
-                case 'arrowup':
-                case 'w':
-                    if (localSnake.dy === 0) { localSnake.dx = 0; localSnake.dy = -1; }
-                    break;
-                case 'arrowdown':
-                case 's':
-                    if (localSnake.dy === 0) { localSnake.dx = 0; localSnake.dy = 1; }
-                    break;
-                case 'arrowleft':
-                case 'a':
-                    if (localSnake.dx === 0) { localSnake.dx = -1; localSnake.dy = 0; }
-                    break;
-                case 'arrowright':
-                case 'd':
-                    if (localSnake.dx === 0) { localSnake.dx = 1; localSnake.dy = 0; }
-                    break;
+            // Lock browser scroll for arrow keys
+            if(["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].indexOf(e.code) > -1) {
+                e.preventDefault();
             }
-        });
 
-        // Simple local game loop for testing updates
+            switch(e.key.toLowerCase()) {
+                case 'arrowup': case 'w':
+                    if (localSnake.dy === 0) { localSnake.dx = 0; localSnake.dy = -1; } break;
+                case 'arrowdown': case 's':
+                    if (localSnake.dy === 0) { localSnake.dx = 0; localSnake.dy = 1; } break;
+                case 'arrowleft': case 'a':
+                    if (localSnake.dx === 0) { localSnake.dx = -1; localSnake.dy = 0; } break;
+                case 'arrowright': case 'd':
+                    if (localSnake.dx === 0) { localSnake.dx = 1; localSnake.dy = 0; } break;
+            }
+        }, false);
+
         function gameLoop() {
-            // Move local snake position
+            if (!tileSize) return;
+
+            // Track snake segments history
+            if (localSnake.dx !== 0 || localSnake.dy !== 0) {
+                localSnake.body.push({x: localSnake.x, y: localSnake.y});
+                while(localSnake.body.length > tailLength) {
+                    localSnake.body.shift();
+                }
+            }
+
             localSnake.x += localSnake.dx;
             localSnake.y += localSnake.dy;
 
-            // Wrap snake positions on screen edges
-            if (localSnake.x < 0) localSnake.x = TILE_COUNT - 1;
-            if (localSnake.x >= TILE_COUNT) localSnake.x = 0;
-            if (localSnake.y < 0) localSnake.y = TILE_COUNT - 1;
-            if (localSnake.y >= TILE_COUNT) localSnake.y = 0;
+            // Edge mapping logic
+            if (localSnake.x < 0) localSnake.x = GRID_COUNT_X - 1;
+            if (localSnake.x >= GRID_COUNT_X) localSnake.x = 0;
+            if (localSnake.y < 0) localSnake.y = GRID_COUNT_Y - 1;
+            if (localSnake.y >= GRID_COUNT_Y) localSnake.y = 0;
 
-            // Check food collision
-            if (localSnake.x === food.x && localSnake.y === food.y) {
-                localSnake.score += 10;
-                food.x = Math.floor(Math.random() * TILE_COUNT);
-                food.y = Math.floor(Math.random() * TILE_COUNT);
+            // Multi-food matrix collision mapping
+            for (let i = 0; i < foodArray.length; i++) {
+                if (localSnake.x === foodArray[i].x && localSnake.y === foodArray[i].y) {
+                    localSnake.score += 10; // Exactly 10 points added
+                    tailLength++; // Grow segment length
+                    scoreDisplay.innerText = localSnake.score;
+                    
+                    if (localSnake.score > parseInt(hiDisplay.innerText)) {
+                        hiDisplay.innerText = localSnake.score;
+                    }
+
+                    // Instant re-spawn coordinates switch
+                    foodArray[i].x = Math.floor(Math.random() * GRID_COUNT_X);
+                    foodArray[i].y = Math.floor(Math.random() * GRID_COUNT_Y);
+                    break; 
+                }
             }
 
-            // Update the server with our new movement and score
+            // Sync matrix positions directly to cloud server pipeline
             if (localSnake.dx !== 0 || localSnake.dy !== 0) {
-                socket.emit('playerUpdate', { x: localSnake.x, y: localSnake.y, score: localSnake.score });
+                socket.emit('playerUpdate', { 
+                    x: localSnake.x, 
+                    y: localSnake.y, 
+                    score: localSnake.score,
+                    body: localSnake.body
+                });
             }
 
-            // Draw Everything
+            // Graphic render frames pipeline
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Draw Food
-            ctx.fillStyle = '#ff0055';
-            ctx.shadowBlur = 10;
-            ctx.shadowColor = '#ff0055';
-            ctx.fillRect(food.x * GRID_SIZE, food.y * GRID_SIZE, GRID_SIZE - 2, GRID_SIZE - 2);
+            // Render Chaotic Food Pellets
+            ctx.fillStyle = '#ff7675';
+            foodArray.forEach(f => {
+                ctx.beginPath();
+                ctx.arc((f.x * tileSize) + (tileSize/2), (f.y * tileSize) + (tileSize/2), tileSize/3, 0, 2 * Math.PI);
+                ctx.fill();
+            });
 
-            // Draw Other Players
-            ctx.shadowBlur = 8;
+            // Render Peer Elements (Other Snakes)
             Object.keys(currentPlayers).forEach((id) => {
                 if (id !== socket.id) {
-                    ctx.fillStyle = currentPlayers[id].color || '#00ffcc';
-                    ctx.shadowColor = ctx.fillStyle;
-                    ctx.fillRect(currentPlayers[id].x * GRID_SIZE, currentPlayers[id].y * GRID_SIZE, GRID_SIZE - 2, GRID_SIZE - 2);
+                    ctx.fillStyle = currentPlayers[id].color || '#fdcb6e';
+                    const pBody = currentPlayers[id].body || [];
+                    pBody.forEach(seg => {
+                        ctx.fillRect(seg.x * tileSize + 1, seg.y * tileSize + 1, tileSize - 2, tileSize - 2);
+                    });
+                    ctx.fillRect(currentPlayers[id].x * tileSize + 1, currentPlayers[id].y * tileSize + 1, tileSize - 2, tileSize - 2);
                 }
             });
 
-            // Draw Local Player Snake
-            ctx.fillStyle = '#00ffcc';
-            ctx.shadowColor = '#00ffcc';
-            ctx.fillRect(localSnake.x * GRID_SIZE, localSnake.y * GRID_SIZE, GRID_SIZE - 2, GRID_SIZE - 2);
-            ctx.shadowBlur = 0; // Reset blur
+            // Render Host Vector (Your Snake)
+            ctx.fillStyle = '#00ffaa'; // Premium Neon Canva Green
+            localSnake.body.forEach(seg => {
+                ctx.fillRect(seg.x * tileSize + 1, seg.y * tileSize + 1, tileSize - 2, tileSize - 2);
+            });
+            ctx.fillRect(localSnake.x * tileSize + 1, localSnake.y * tileSize + 1, tileSize - 2, tileSize - 2);
         }
 
-        setInterval(gameLoop, 150); // Updates game every 150ms
+        setInterval(gameLoop, 90); // Blazing fast arcade tick interval speed (90ms)
     </script>
 </body>
 </html>
