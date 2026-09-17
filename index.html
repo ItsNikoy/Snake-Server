@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Arcade Local Snake</title>
+    <title>Multiplayer Arcade Snake</title>
+    <!-- Connect to working Socket.io Library -->
+    <script src="https://socket.io"></script>
     <style>
         * {
             box-sizing: border-box;
@@ -61,37 +63,17 @@
             background-color: #0c1624;
             display: block;
         }
-        #game-over-screen {
-            display: none;
+        #connection-toast {
             position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(12, 22, 36, 0.9);
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            border-radius: 0 0 4px 4px;
-        }
-        #game-over-screen h2 {
-            color: #ff7675;
-            font-size: 32px;
-            margin-bottom: 10px;
-            letter-spacing: 2px;
-        }
-        #restart-btn {
-            background: #1c2d42;
-            color: #00ffcc;
-            border: 2px solid #00ffcc;
-            padding: 10px 20px;
-            font-size: 16px;
-            font-family: inherit;
-            font-weight: bold;
-            cursor: pointer;
+            bottom: 15px;
+            left: 15px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 6px 12px;
             border-radius: 4px;
-            transition: 0.2s;
-        }
-        #restart-btn:hover {
-            background: #00ffcc;
-            color: #0c1624;
+            font-size: 12px;
+            color: #ff9900;
+            border: 1px solid #333;
+            pointer-events: none;
         }
     </style>
 </head>
@@ -108,22 +90,18 @@
         <!-- Big Multi-Food Arena -->
         <div id="arena-container">
             <canvas id="gameCanvas"></canvas>
-            
-            <!-- End Game Overlay -->
-            <div id="game-over-screen">
-                <h2>GAME OVER</h2>
-                <button id="restart-btn" onclick="resetGame()">PLAY AGAIN</button>
-            </div>
+            <div id="connection-toast">Connecting to Render server...</div>
         </div>
     </div>
 
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
-        const gameOverScreen = document.getElementById('game-over-screen');
+        const toast = document.getElementById('connection-toast');
         const scoreDisplay = document.getElementById('current-score');
         const hiDisplay = document.getElementById('hi-val');
 
+        // Layout Scaling Constants
         const GRID_COUNT_X = 64; 
         const GRID_COUNT_Y = 36; 
         let tileSize = 0;
@@ -135,14 +113,25 @@
         }
         window.addEventListener('resize', resizeCanvas);
 
-        // Single Player Configuration
-        let localSnake = { x: 32, y: 18, dx: 0, dy: 0, score: 0, body: [], tail: 5, color: '#00ffaa' };
+        // Your exact live Render server connection link
+        const socket = io("https://onrender.com");
 
+        let currentPlayers = {};
+        let localSnake = {
+            x: Math.floor(Math.random() * (GRID_COUNT_X - 10)) + 5,
+            y: Math.floor(Math.random() * (GRID_COUNT_Y - 10)) + 5,
+            dx: 0,
+            dy: 0,
+            score: 0,
+            body: []
+        };
+        let tailLength = 5;
+
+        // Massive Chaotic Food Spawns Array
         let foodArray = [];
         const TOTAL_FOOD_COUNT = 150; 
-        let isGameOver = false;
 
-        function spawnFoodMatrix() {
+        function spawnInitialFood() {
             foodArray = [];
             for (let i = 0; i < TOTAL_FOOD_COUNT; i++) {
                 foodArray.push({
@@ -152,82 +141,100 @@
             }
         }
 
-        function resetGame() {
-            isGameOver = false;
-            gameOverScreen.style.display = 'none';
-            
-            localSnake = { x: 32, y: 18, dx: 0, dy: 0, score: 0, body: [], tail: 5, color: '#00ffaa' };
-            scoreDisplay.innerText = "0";
-            
+        socket.on('connect', () => {
+            toast.innerText = "CONNECTED TO LOBBY";
+            toast.style.color = "#00ffcc";
             resizeCanvas();
-            spawnFoodMatrix();
-        }
+            spawnInitialFood();
+        });
 
-        // Controls (WASD + Arrows both work)
+        socket.on('disconnect', () => {
+            toast.innerText = "DISCONNECTED";
+            toast.style.color = "#ff0055";
+        });
+
+        socket.on('currentPlayers', (players) => { currentPlayers = players; });
+        socket.on('newPlayer', (playerInfo) => { currentPlayers[playerInfo.id] = playerInfo; });
+        socket.on('playerDisconnected', (id) => { delete currentPlayers[id]; });
+        
+        socket.on('playerMoved', (playerInfo) => {
+            if (currentPlayers[playerInfo.id]) {
+                currentPlayers[playerInfo.id].x = playerInfo.x;
+                currentPlayers[playerInfo.id].y = playerInfo.y;
+                currentPlayers[playerInfo.id].body = playerInfo.body || [];
+            }
+        });
+
+        // Anti-Page Scrolling Lock + Direction Inputs
         window.addEventListener('keydown', (e) => {
             if(["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].indexOf(e.code) > -1) {
-                e.preventDefault(); 
+                e.preventDefault();
             }
 
-            if (isGameOver) return;
-
             switch(e.key.toLowerCase()) {
-                case 'arrowup':    case 'w': if (localSnake.dy === 0) { localSnake.dx = 0; localSnake.dy = -1; } break;
-                case 'arrowdown':  case 's': if (localSnake.dy === 0) { localSnake.dx = 0; localSnake.dy = 1; } break;
-                case 'arrowleft':  case 'a': if (localSnake.dx === 0) { localSnake.dx = -1; localSnake.dy = 0; } break;
-                case 'arrowright': case 'd': if (localSnake.dx === 0) { localSnake.dx = 1; localSnake.dy = 0; } break;
+                case 'arrowup': case 'w':
+                    if (localSnake.dy === 0) { localSnake.dx = 0; localSnake.dy = -1; } break;
+                case 'arrowdown': case 's':
+                    if (localSnake.dy === 0) { localSnake.dx = 0; localSnake.dy = 1; } break;
+                case 'arrowleft': case 'a':
+                    if (localSnake.dx === 0) { localSnake.dx = -1; localSnake.dy = 0; } break;
+                case 'arrowright': case 'd':
+                    if (localSnake.dx === 0) { localSnake.dx = 1; localSnake.dy = 0; } break;
             }
         }, false);
 
-        function handleSnakeMovement() {
-            if (localSnake.dx === 0 && localSnake.dy === 0) return;
+        function gameLoop() {
+            if (!tileSize) return;
 
-            localSnake.body.push({x: localSnake.x, y: localSnake.y});
-            while(localSnake.body.length > localSnake.tail) {
-                localSnake.body.shift();
+            // Track snake segments history
+            if (localSnake.dx !== 0 || localSnake.dy !== 0) {
+                localSnake.body.push({x: localSnake.x, y: localSnake.y});
+                while(localSnake.body.length > tailLength) {
+                    localSnake.body.shift();
+                }
             }
 
             localSnake.x += localSnake.dx;
             localSnake.y += localSnake.dy;
 
+            // Edge mapping logic
             if (localSnake.x < 0) localSnake.x = GRID_COUNT_X - 1;
             if (localSnake.x >= GRID_COUNT_X) localSnake.x = 0;
             if (localSnake.y < 0) localSnake.y = GRID_COUNT_Y - 1;
             if (localSnake.y >= GRID_COUNT_Y) localSnake.y = 0;
 
+            // Multi-food matrix collision mapping (+10 points)
             for (let i = 0; i < foodArray.length; i++) {
                 if (localSnake.x === foodArray[i].x && localSnake.y === foodArray[i].y) {
-                    localSnake.score += 10;
-                    localSnake.tail++;
+                    localSnake.score += 10; 
+                    tailLength++; 
                     scoreDisplay.innerText = localSnake.score;
                     
                     if (localSnake.score > parseInt(hiDisplay.innerText)) {
                         hiDisplay.innerText = localSnake.score;
                     }
 
+                    // Instant re-spawn coordinates switch
                     foodArray[i].x = Math.floor(Math.random() * GRID_COUNT_X);
                     foodArray[i].y = Math.floor(Math.random() * GRID_COUNT_Y);
-                    break;
+                    break; 
                 }
             }
 
-            localSnake.body.forEach(seg => {
-                if (localSnake.x === seg.x && localSnake.y === seg.y) {
-                    isGameOver = true;
-                    gameOverScreen.style.display = 'flex';
-                }
-            });
-        }
+            // Send vector packet updates over the websocket connection
+            if (localSnake.dx !== 0 || localSnake.dy !== 0) {
+                socket.emit('playerUpdate', { 
+                    x: localSnake.x, 
+                    y: localSnake.y, 
+                    score: localSnake.score,
+                    body: localSnake.body
+                });
+            }
 
-        function gameLoop() {
-            if (!tileSize) resizeCanvas();
-            if (isGameOver) return;
-
-            handleSnakeMovement();
-
+            // Clear screen for next frame
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Draw all 150 food items
+            // Draw Food Items
             ctx.fillStyle = '#ff7675';
             foodArray.forEach(f => {
                 ctx.beginPath();
@@ -235,17 +242,27 @@
                 ctx.fill();
             });
 
-            // Draw Snake
-            ctx.fillStyle = localSnake.color;
+            // Draw Other Online Snakes
+            Object.keys(currentPlayers).forEach((id) => {
+                if (id !== socket.id) {
+                    ctx.fillStyle = currentPlayers[id].color || '#fdcb6e';
+                    const pBody = currentPlayers[id].body || [];
+                    pBody.forEach(seg => {
+                        ctx.fillRect(seg.x * tileSize + 1, seg.y * tileSize + 1, tileSize - 2, tileSize - 2);
+                    });
+                    ctx.fillRect(currentPlayers[id].x * tileSize + 1, currentPlayers[id].y * tileSize + 1, tileSize - 2, tileSize - 2);
+                }
+            });
+
+            // Draw Your Neon Snake
+            ctx.fillStyle = '#00ffaa'; 
             localSnake.body.forEach(seg => {
                 ctx.fillRect(seg.x * tileSize + 1, seg.y * tileSize + 1, tileSize - 2, tileSize - 2);
             });
             ctx.fillRect(localSnake.x * tileSize + 1, localSnake.y * tileSize + 1, tileSize - 2, tileSize - 2);
         }
 
-        resetGame();
         setInterval(gameLoop, 90);
     </script>
 </body>
 </html>
-
