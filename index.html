@@ -260,10 +260,3 @@
             localSnake.body.forEach(seg => {
                 ctx.fillRect(seg.x * tileSize + 1, seg.y * tileSize + 1, tileSize - 2, tileSize - 2);
             });
-            ctx.fillRect(localSnake.x * tileSize + 1, localSnake.y * tileSize + 1, tileSize - 2, tileSize - 2);
-        }
-
-        setInterval(gameLoop, 90); // Blazing fast arcade tick interval speed (90ms)
-    </script>
-</body>
-</html>
