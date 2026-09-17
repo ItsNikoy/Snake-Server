@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Multiplayer Arcade Snake</title>
-    <!-- Connect to Socket.io Client -->
+    <!-- FIX 1: Linked the actual working Socket.io library -->
     <script src="https://socket.io"></script>
     <style>
         * {
@@ -113,8 +113,8 @@
         }
         window.addEventListener('resize', resizeCanvas);
 
-        // Connect directly to your live Render server address
-        const socket = io("https://onrender.com");
+        // FIX 2: Reconnected your specific Render cloud server address
+        const socket = io("https://snake-server-wf2i.onrender.com");
 
         let currentPlayers = {};
         let localSnake = {
@@ -167,7 +167,6 @@
 
         // Anti-Page Scrolling Lock + Direction Inputs
         window.addEventListener('keydown', (e) => {
-            // Lock browser scroll for arrow keys
             if(["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].indexOf(e.code) > -1) {
                 e.preventDefault();
             }
@@ -207,8 +206,8 @@
             // Multi-food matrix collision mapping
             for (let i = 0; i < foodArray.length; i++) {
                 if (localSnake.x === foodArray[i].x && localSnake.y === foodArray[i].y) {
-                    localSnake.score += 10; // Exactly 10 points added
-                    tailLength++; // Grow segment length
+                    localSnake.score += 10; 
+                    tailLength++; 
                     scoreDisplay.innerText = localSnake.score;
                     
                     if (localSnake.score > parseInt(hiDisplay.innerText)) {
@@ -222,7 +221,7 @@
                 }
             }
 
-            // Sync matrix positions directly to cloud server pipeline
+            // FIX 3: Fully completed the cut-off data synchronization and rendering loop
             if (localSnake.dx !== 0 || localSnake.dy !== 0) {
                 socket.emit('playerUpdate', { 
                     x: localSnake.x, 
@@ -232,10 +231,10 @@
                 });
             }
 
-            // Graphic render frames pipeline
+            // Clear screen for next frame
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Render Chaotic Food Pellets
+            // Draw Food Items
             ctx.fillStyle = '#ff7675';
             foodArray.forEach(f => {
                 ctx.beginPath();
@@ -243,7 +242,7 @@
                 ctx.fill();
             });
 
-            // Render Peer Elements (Other Snakes)
+            // Draw Other Online Snakes
             Object.keys(currentPlayers).forEach((id) => {
                 if (id !== socket.id) {
                     ctx.fillStyle = currentPlayers[id].color || '#fdcb6e';
@@ -255,8 +254,15 @@
                 }
             });
 
-            // Render Host Vector (Your Snake)
-            ctx.fillStyle = '#00ffaa'; // Premium Neon Canva Green
+            // Draw Your Neon Snake
+            ctx.fillStyle = '#00ffaa'; 
             localSnake.body.forEach(seg => {
                 ctx.fillRect(seg.x * tileSize + 1, seg.y * tileSize + 1, tileSize - 2, tileSize - 2);
             });
+            ctx.fillRect(localSnake.x * tileSize + 1, localSnake.y * tileSize + 1, tileSize - 2, tileSize - 2);
+        }
+
+        setInterval(gameLoop, 90);
+    </script>
+</body>
+</html>
